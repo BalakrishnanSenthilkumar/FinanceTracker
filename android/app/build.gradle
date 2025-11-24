@@ -116,4 +116,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // react-native-executorch will be auto-linked
+    // If you need to manually link, uncomment below:
+    // implementation project(':react-native-executorch')
 }
