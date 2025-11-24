@@ -1,0 +1,2 @@
+// Category management UI component
+

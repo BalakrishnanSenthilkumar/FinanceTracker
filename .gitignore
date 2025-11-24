@@ -76,3 +76,10 @@ yarn-error.log
 
 package-lock.json
 podfile.lock
+
+# Encrypted model files
+src/assets/models_encrypted/*.encrypted
+src/assets/models_encrypted/*.tflite
+src/assets/models_encrypted/*.bin
+!src/assets/models_encrypted/.gitkeep
+!src/assets/models_encrypted/README.md

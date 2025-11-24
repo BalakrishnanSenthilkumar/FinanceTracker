@@ -1,0 +1,2 @@
+// Insights dashboard UI component
+
