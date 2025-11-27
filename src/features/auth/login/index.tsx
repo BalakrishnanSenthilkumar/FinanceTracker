@@ -1,7 +1,7 @@
 import { Button, Text, View } from 'react-native';
 import { loadLlamaModelInfo } from 'llama.rn';
 import { useEffect } from 'react';
-// import model from '../../../core/assets/models/qwen2-0_5b-instruct-q5_k_m.gguf'
+import { TextInput } from '../../../shared/components';
 
 const Login = ({ navigation }: any) => {
   const modelPath = 'models/qwen2-0_5b-instruct-q5_k_m.gguf';
@@ -20,7 +20,19 @@ const Login = ({ navigation }: any) => {
   }, []);
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Login</Text>
+      <Text>Welcome To Finance Tracker</Text>
+      <TextInput
+        placeholder="Email"
+        containerStyle={{ width: '100%', alignItems: 'center' }}
+        style={{
+          width: '80%',
+          // height: 40,
+          borderWidth: 1,
+          borderColor: 'lightgray',
+          borderRadius: 5,
+          paddingHorizontal: 10,
+        }}
+      />
       <Button title="Home" onPress={() => navigation.navigate('HomeTab')} />
       <Button
         title="Register"

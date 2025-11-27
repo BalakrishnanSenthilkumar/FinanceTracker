@@ -9,14 +9,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
 } from 'react-native';
-import { initLlama } from 'llama.rn';
 import { useEffect, useState } from 'react';
-import RNFS from 'react-native-fs';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { container, ServiceIdentifiers } from '../../shared/di/Container';
+import { IModelService } from '../../modules/genai/interfaces/IModelService';
+import { ModelContext } from '../../modules/genai/interfaces/IModelService';
+import { Message } from '../../modules/genai/types';
 
 // Configuration: Change this to use a different model
 const MODEL_CONFIG = {
@@ -32,7 +29,7 @@ const Home = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [context, setContext] = useState<any>(null);
+  const [context, setContext] = useState<ModelContext | null>(null);
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
 
@@ -42,35 +39,20 @@ const Home = () => {
         setIsInitializing(true);
         setError(null);
 
-        let modelPath: string;
-        const modelFilename = MODEL_CONFIG.filename;
+        // Resolve ModelService from DI container
+        const modelService = container.resolve<IModelService>(
+          ServiceIdentifiers.ModelService,
+        );
 
-        if (Platform.OS === 'android') {
-          // For Android, we need to copy the asset to a writable location first
-          const assetPath = `models/${modelFilename}`;
-          const destPath = `${RNFS.DocumentDirectoryPath}/${modelFilename}`;
+        // Get model path (handles platform-specific logic)
+        const modelPath = await modelService.getModelPath(
+          MODEL_CONFIG.filename,
+        );
 
-          // Check if file already exists
-          const fileExists = await RNFS.exists(destPath);
+        console.log('Initializing model with path:', modelPath);
 
-          if (!fileExists) {
-            console.log('Copying model from assets to:', destPath);
-            // Copy from assets to documents directory
-            await RNFS.copyFileAssets(assetPath, destPath);
-            console.log('Model copied successfully');
-          } else {
-            console.log('Model already exists at:', destPath);
-          }
-
-          modelPath = destPath;
-        } else {
-          // For iOS, use the path directly from bundle
-          modelPath = `models/${modelFilename}`;
-        }
-
-        console.log('Initializing llama with model path:', modelPath);
-
-        const llamaContext = await initLlama({
+        // Initialize model using the service
+        const modelContext = await modelService.initializeModel({
           model: modelPath,
           use_mlock: false, // Set to false for Android to avoid permission issues
           n_ctx: 2048,
@@ -79,7 +61,7 @@ const Home = () => {
         });
 
         console.log('Model initialized successfully');
-        setContext(llamaContext);
+        setContext(modelContext);
         setIsInitializing(false);
       } catch (err) {
         console.error('Error initializing model:', err);
