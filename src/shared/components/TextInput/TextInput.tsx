@@ -8,6 +8,7 @@ import {
   View,
   Text,
 } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/scaling';
 
 export interface TextInputProps extends RNTextInputProps {
   /**
@@ -67,21 +68,21 @@ export const TextInput: React.FC<TextInputProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   label: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   defaultInput: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderRadius: moderateScale(8),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    fontSize: moderateScale(16),
     color: '#000000',
     backgroundColor: '#FFFFFF',
   },
@@ -89,8 +90,8 @@ const styles = StyleSheet.create({
     borderColor: '#D32F2F',
   },
   errorText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#D32F2F',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
 });

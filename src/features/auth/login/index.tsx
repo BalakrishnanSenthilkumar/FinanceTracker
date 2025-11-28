@@ -1,7 +1,7 @@
 import { Button, Text, View } from 'react-native';
+import { SafeAreaView, TextInput } from '../../../shared/components';
 import { loadLlamaModelInfo } from 'llama.rn';
 import { useEffect } from 'react';
-import { TextInput } from '../../../shared/components';
 
 const Login = ({ navigation }: any) => {
   const modelPath = 'models/qwen2-0_5b-instruct-q5_k_m.gguf';
@@ -19,7 +19,9 @@ const Login = ({ navigation }: any) => {
     }
   }, []);
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <SafeAreaView
+      style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+    >
       <Text>Welcome To Finance Tracker</Text>
       <TextInput
         placeholder="Email"
@@ -38,7 +40,7 @@ const Login = ({ navigation }: any) => {
         title="Register"
         onPress={() => navigation.navigate('Register')}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
