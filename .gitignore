@@ -79,3 +79,6 @@ yarn-error.log
 
 package-lock.json
 yarn.lock
+
+# Models
+src/main/assets/models/*
