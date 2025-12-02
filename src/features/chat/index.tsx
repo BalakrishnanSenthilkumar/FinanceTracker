@@ -22,7 +22,10 @@ const MODEL_CONFIG = {
   // Place your .gguf model file in:
   // - Android: android/app/src/main/assets/models/
   // - iOS: Add to Xcode project in the models folder
-  filename: 'qwen2-0_5b-instruct-q5_k_m.gguf',
+  //   filename: 'qwen2-0_5b-instruct-q5_k_m.gguf',
+  filename: 'gemma-3n-E2B-it-Q4_0.gguf',
+  //   filename: 'Phi-3-mini-4k-instruct-q4.gguf',
+  //   filename: 'llama3-70b-8192.gguf',
   // Alternative: 'gemma-2b-it-q4_k_m.gguf' (if you have a GGUF version)
 };
 
