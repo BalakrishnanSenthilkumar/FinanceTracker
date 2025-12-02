@@ -10,7 +10,17 @@ export class FileService implements IFileService {
   }
 
   async copyFileAssets(assetPath: string, destPath: string): Promise<void> {
-    await RNFS.copyFileAssets(assetPath, destPath);
+    try {
+      await RNFS.copyFileAssets(assetPath, destPath);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Unknown error occurred while copying file';
+      throw new Error(
+        `Failed to copy asset file "${assetPath}" to "${destPath}": ${errorMessage}. Please ensure the file exists in the assets folder.`,
+      );
+    }
   }
 
   getDocumentDirectoryPath(): string {

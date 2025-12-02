@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from '../../shared/components';
 import { useAtom } from 'jotai';
@@ -6,12 +6,14 @@ import {
   totalBalanceAtom,
   totalIncomeAtom,
   totalExpenseAtom,
+  transactionsAtom,
 } from '../../shared/atoms/transactions';
 import { useNavigation } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { styles } from './styles';
+import { getTransactions } from '../../shared/db/transactionsDB';
 
 type TabParamList = {
   Home: undefined;
@@ -35,6 +37,19 @@ const Home = () => {
   const [totalBalance] = useAtom(totalBalanceAtom);
   const [totalIncome] = useAtom(totalIncomeAtom);
   const [totalExpense] = useAtom(totalExpenseAtom);
+  const [, setTransactions] = useAtom(transactionsAtom);
+
+  useEffect(() => {
+    getTransactions()
+      .then(transactions => {
+        // console.log('transactions', transactions);
+        // Update the transactions atom - derived atoms will recalculate automatically
+        setTransactions(transactions);
+      })
+      .catch(err => {
+        console.error('Failed to fetch transactions', err);
+      });
+  }, [setTransactions]);
 
   // Calculate chat button position: tab bar height (60) + tab bar bottom padding + spacing (16)
 

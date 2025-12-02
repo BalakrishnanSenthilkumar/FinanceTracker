@@ -28,7 +28,8 @@ export const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: scale(16),
-    paddingBottom: verticalScale(8),
+    paddingBottom: verticalScale(20),
+    flexGrow: 1,
   },
   emptyContainer: {
     flex: 1,

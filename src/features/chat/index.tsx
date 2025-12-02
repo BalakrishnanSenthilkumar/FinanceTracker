@@ -5,16 +5,18 @@ import {
   Platform,
   TextInput,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from '../../shared/components';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { container, ServiceIdentifiers } from '../../shared/di/Container';
 import { IModelService } from '../../modules/genai/interfaces/IModelService';
 import { ModelContext } from '../../modules/genai/interfaces/IModelService';
 import { Message } from '../../modules/genai/types';
 import { styles } from './styles';
+import { getTransactions } from '../../shared/db/transactionsDB';
+import { Transaction } from '../../shared/atoms/transactions';
 
 // Configuration: Change this to use a different model
 const MODEL_CONFIG = {
@@ -33,6 +35,8 @@ const Chat = () => {
   const [context, setContext] = useState<ModelContext | null>(null);
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+
+  const flatListRef = useRef<FlatList<Message>>(null);
 
   useEffect(() => {
     const initializeModel = async () => {
@@ -76,6 +80,49 @@ const Chat = () => {
     initializeModel();
   }, []);
 
+  // Helper function to format transactions for AI context
+  const formatTransactionsForAI = (transactions: Transaction[]): string => {
+    if (transactions.length === 0) {
+      return 'No transactions available.';
+    }
+
+    let formattedData = `User's Financial Transactions (${transactions.length} total):\n\n`;
+
+    // Calculate summary statistics
+    const income = transactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expenses = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const balance = income - expenses;
+
+    formattedData += `Summary:\n`;
+    formattedData += `- Total Income: $${income.toFixed(2)}\n`;
+    formattedData += `- Total Expenses: $${expenses.toFixed(2)}\n`;
+    formattedData += `- Balance: $${balance.toFixed(2)}\n\n`;
+
+    formattedData += `Recent Transactions:\n`;
+    transactions.slice(0, 20).forEach((transaction, index) => {
+      const sign = transaction.type === 'income' ? '+' : '-';
+      formattedData += `${index + 1}. ${transaction.name} (${
+        transaction.type
+      }): ${sign}$${transaction.amount.toFixed(2)}`;
+      if (transaction.description) {
+        formattedData += ` - ${transaction.description}`;
+      }
+      formattedData += ` [Date: ${transaction.date}]\n`;
+    });
+
+    if (transactions.length > 20) {
+      formattedData += `\n... and ${
+        transactions.length - 20
+      } more transactions.\n`;
+    }
+    console.log('formattedData', formattedData);
+    return formattedData;
+  };
+
   const sendMessage = async () => {
     if (!userInput.trim() || !context || isLoading) {
       return;
@@ -91,6 +138,10 @@ const Chat = () => {
     setMessages(prev => [...prev, newUserMessage]);
 
     try {
+      // Fetch transactions from SQLite
+      const transactions = await getTransactions();
+      const transactionsContext = formatTransactionsForAI(transactions);
+
       const stopWords = [
         '</s>',
         '<|end|>',
@@ -103,12 +154,15 @@ const Chat = () => {
         '<|endoftext|>',
       ];
 
-      // Build messages array with system message and conversation history
+      // Build messages array with system message including transaction data
       const messagesForCompletion = [
         {
           role: 'system' as const,
-          content:
-            'This is a conversation between user and assistant, a friendly chatbot.',
+          content: `You are a helpful financial assistant. You have access to the user's transaction data and can help them understand their finances, answer questions about their spending, income, and provide financial insights.
+
+${transactionsContext}
+
+Please answer the user's questions based on this data. Be concise, helpful, and provide specific numbers when relevant.`,
         },
         ...messages.map(msg => ({
           role: msg.role,
@@ -141,6 +195,7 @@ const Chat = () => {
         content: msgResult.text,
       };
       setMessages(prev => [...prev, assistantMessage]);
+      flatListRef.current?.scrollToEnd({ animated: true });
       setIsLoading(false);
     } catch (err) {
       console.error('Error generating response:', err);
@@ -152,90 +207,104 @@ const Chat = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {isInitializing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" />
           <Text style={styles.loadingText}>Initializing AI model...</Text>
         </View>
       ) : (
-        <>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-            style={styles.keyboardAvoidingView}
-          >
-            <ScrollView
-              style={styles.messagesContainer}
-              contentContainerStyle={styles.messagesContent}
-            >
-              {messages.length === 0 && (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>
-                    Start a conversation with the AI assistant
-                  </Text>
-                </View>
-              )}
-              {messages.map((message, index) => (
-                <View
-                  key={index}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          style={styles.keyboardAvoidingView}
+        >
+          <FlatList
+            ref={flatListRef as any}
+            data={messages}
+            keyExtractor={(item, index) => `message-${index}`}
+            onContentSizeChange={() => {
+              if (messages.length > 0) {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
+            onLayout={() => {
+              if (messages.length > 0) {
+                flatListRef.current?.scrollToEnd({ animated: false });
+              }
+            }}
+            renderItem={({ item: message }) => (
+              <View
+                style={[
+                  styles.messageBubble,
+                  message.role === 'user'
+                    ? styles.userMessage
+                    : styles.assistantMessage,
+                ]}
+              >
+                <Text
                   style={[
-                    styles.messageBubble,
+                    styles.messageText,
                     message.role === 'user'
-                      ? styles.userMessage
-                      : styles.assistantMessage,
+                      ? styles.userMessageText
+                      : styles.assistantMessageText,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.messageText,
-                      message.role === 'user'
-                        ? styles.userMessageText
-                        : styles.assistantMessageText,
-                    ]}
-                  >
-                    {message.content}
-                  </Text>
-                </View>
-              ))}
-              {isLoading && (
-                <View style={styles.loadingBubble}>
-                  <ActivityIndicator size="small" color="#666" />
-                  <Text style={styles.loadingMessageText}>Thinking...</Text>
-                </View>
-              )}
-              {error && (
-                <View style={styles.errorBubble}>
-                  <Text style={styles.errorText}>Error: {error}</Text>
-                </View>
-              )}
-            </ScrollView>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.textInput}
-                value={userInput}
-                onChangeText={setUserInput}
-                placeholder="Type your message..."
-                placeholderTextColor="#999"
-                multiline
-                editable={!isLoading}
-                onSubmitEditing={sendMessage}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!userInput.trim() || isLoading) && styles.sendButtonDisabled,
-                ]}
-                onPress={sendMessage}
-                disabled={!userInput.trim() || isLoading}
-              >
-                <Text style={styles.sendButtonText}>Send</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </>
+                  {message.content}
+                </Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  Ask me about your finances! I can help you analyze your
+                  transactions, spending patterns, and financial health.
+                </Text>
+              </View>
+            }
+            ListFooterComponent={
+              <>
+                {isLoading && (
+                  <View style={styles.loadingBubble}>
+                    <ActivityIndicator size="small" color="#666" />
+                    <Text style={styles.loadingMessageText}>Thinking...</Text>
+                  </View>
+                )}
+                {error && (
+                  <View style={styles.errorBubble}>
+                    <Text style={styles.errorText}>Error: {error}</Text>
+                  </View>
+                )}
+              </>
+            }
+            style={styles.messagesContainer}
+            contentContainerStyle={styles.messagesContent}
+          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={userInput}
+              onChangeText={setUserInput}
+              placeholder="Type your message..."
+              placeholderTextColor="#999"
+              multiline
+              editable={!isLoading}
+              onSubmitEditing={sendMessage}
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!userInput.trim() || isLoading) && styles.sendButtonDisabled,
+              ]}
+              onPress={sendMessage}
+              disabled={!userInput.trim() || isLoading}
+            >
+              <Text style={styles.sendButtonText}>Send</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -23,7 +23,7 @@ const Login = ({ navigation }: any) => {
       style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
     >
       <Text>Welcome To Finance Tracker</Text>
-      <TextInput
+      {/* <TextInput
         placeholder="Email"
         containerStyle={{ width: '100%', alignItems: 'center' }}
         style={{
@@ -34,7 +34,7 @@ const Login = ({ navigation }: any) => {
           borderRadius: 5,
           paddingHorizontal: 10,
         }}
-      />
+      /> */}
       <Button title="Home" onPress={() => navigation.navigate('HomeTab')} />
       <Button
         title="Register"

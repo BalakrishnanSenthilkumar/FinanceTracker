@@ -13,6 +13,7 @@ import {
   transactionsAtom,
   Transaction,
 } from '../../../shared/atoms/transactions';
+import { insertTransaction } from '../../../shared/db/transactionsDB';
 import { styles } from './styles';
 import { moderateScale } from '../../../shared/utils/scaling';
 import { IncomeIcon, ExpenseIcon } from '../../../shared/components/icons';
@@ -32,7 +33,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim() || !amount.trim()) {
       Alert.alert(
         'Missing Information',
@@ -59,15 +60,26 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       date: new Date().toISOString(),
     };
 
-    setTransactions([...transactions, newTransaction]);
-
-    // Reset form
-    setName('');
-    setAmount('');
-    setDescription('');
-    setType('income');
-
-    onClose();
+    try {
+      await insertTransaction(newTransaction);
+      setTransactions([...transactions, newTransaction]);
+      // Reset form
+      setName('');
+      setAmount('');
+      setDescription('');
+      setType('income');
+      Alert.alert(
+        'Save Success',
+        'Your transaction has been saved successfully.',
+      );
+      onClose();
+    } catch {
+      Alert.alert(
+        'Save Failed',
+        'There was a problem saving your transaction. Please try again.',
+      );
+      return;
+    }
   };
 
   const handleClose = () => {
