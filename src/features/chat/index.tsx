@@ -8,7 +8,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from '../../shared/components';
 import { useEffect, useRef, useState } from 'react';
 import { container, ServiceIdentifiers } from '../../shared/di/Container';
 import { IModelService } from '../../modules/genai/interfaces/IModelService';
@@ -17,6 +16,7 @@ import { Message } from '../../modules/genai/types';
 import { styles } from './styles';
 import { getTransactions } from '../../shared/db/transactionsDB';
 import { Transaction } from '../../shared/atoms/transactions';
+import { InputSanitizer } from '../../modules/genai/safety';
 
 // Configuration: Change this to use a different model
 const MODEL_CONFIG = {
@@ -128,7 +128,18 @@ const Chat = () => {
       return;
     }
 
-    const userMessage = userInput.trim();
+    // Sanitize user input for security (prevents prompt injection & malicious requests)
+    const { sanitized, isBlocked, reason } = InputSanitizer.sanitize(userInput);
+
+    if (isBlocked) {
+      setError(
+        reason || 'Your message could not be processed for security reasons.',
+      );
+      setUserInput('');
+      return;
+    }
+
+    const userMessage = sanitized;
     setUserInput('');
     setIsLoading(true);
     setError(null);
