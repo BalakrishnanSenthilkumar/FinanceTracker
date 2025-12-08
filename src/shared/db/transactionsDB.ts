@@ -1,44 +1,10 @@
-import {
-  open,
-  QuickSQLiteConnection,
-  QuickSQLiteError,
-} from 'react-native-quick-sqlite';
+import { QuickSQLiteError } from 'react-native-quick-sqlite';
 import { Transaction } from '../atoms/transactions';
+import { getDatabase } from './database';
 
-const DB_NAME = 'finance_tracker.db';
-
-let dbInstance: QuickSQLiteConnection | null = null;
-
-const createTables = (db: QuickSQLiteConnection) => {
-  db.execute(
-    `CREATE TABLE IF NOT EXISTS transactions (
-      id TEXT PRIMARY KEY NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      amount REAL NOT NULL,
-      description TEXT,
-      date TEXT NOT NULL
-    );`,
-    [],
-  );
-};
-
-const getDatabase = (): QuickSQLiteConnection => {
-  if (dbInstance) {
-    return dbInstance;
-  }
-
-  try {
-    const db = open({ name: DB_NAME });
-    createTables(db);
-    dbInstance = db;
-    return dbInstance;
-  } catch (error) {
-    console.error('Failed to open SQLite database', error);
-    throw error;
-  }
-};
-
+/**
+ * Insert or update a transaction in the encrypted database
+ */
 export const insertTransaction = async (transaction: Transaction) => {
   const db = getDatabase();
 
@@ -58,11 +24,52 @@ export const insertTransaction = async (transaction: Transaction) => {
   }
 };
 
-export const getTransactions = async () => {
+/**
+ * Get all transactions from the encrypted database
+ */
+export const getTransactions = async (): Promise<Transaction[]> => {
   const db = getDatabase();
   const result = db.execute('SELECT * FROM transactions ORDER BY date DESC;');
 
-  // quick-sqlite returns rows in result.rows
-  console.log('result', result.rows?._array);
-  return result.rows?._array || []; // this is already an array
+  return result.rows?._array || [];
+};
+
+/**
+ * Get transactions for a specific user
+ */
+export const getTransactionsByUserId = async (
+  userId: string,
+): Promise<Transaction[]> => {
+  const db = getDatabase();
+  const result = db.execute(
+    'SELECT * FROM transactions WHERE userId = ? ORDER BY date DESC;',
+    [userId],
+  );
+
+  return result.rows?._array || [];
+};
+
+/**
+ * Delete a transaction by ID
+ */
+export const deleteTransaction = async (id: string): Promise<boolean> => {
+  const db = getDatabase();
+
+  try {
+    db.execute('DELETE FROM transactions WHERE id = ?;', [id]);
+    return true;
+  } catch (error) {
+    console.error('Failed to delete transaction', error);
+    return false;
+  }
+};
+
+/**
+ * Get transaction count
+ */
+export const getTransactionCount = async (): Promise<number> => {
+  const db = getDatabase();
+  const result = db.execute('SELECT COUNT(*) as count FROM transactions;');
+
+  return result.rows?._array[0]?.count || 0;
 };

@@ -15,10 +15,18 @@ declare module 'react-native-quick-sqlite' {
 
   export interface QuickSQLiteConnection {
     execute: (sql: string, params?: any[]) => QuickSQLiteResult;
+    close: () => void;
   }
 
-  export function open(options: {
+  export interface OpenOptions {
     name: string;
     location?: string;
-  }): QuickSQLiteConnection;
+    /**
+     * SQLCipher encryption key
+     * When provided, the database will be encrypted using SQLCipher
+     */
+    encryptionKey?: string;
+  }
+
+  export function open(options: OpenOptions): QuickSQLiteConnection;
 }

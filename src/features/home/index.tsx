@@ -14,6 +14,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { styles } from './styles';
 import { getTransactions } from '../../shared/db/transactionsDB';
+import { useIsFeatureEnabled } from '../../core/config/featureFlags';
 
 type TabParamList = {
   Home: undefined;
@@ -38,6 +39,9 @@ const Home = () => {
   const [totalIncome] = useAtom(totalIncomeAtom);
   const [totalExpense] = useAtom(totalExpenseAtom);
   const [, setTransactions] = useAtom(transactionsAtom);
+
+  // Feature flag - reactive, re-renders if flag changes at runtime
+  const isAiChatEnabled = useIsFeatureEnabled('features.aiChat');
 
   useEffect(() => {
     getTransactions()
@@ -123,18 +127,20 @@ const Home = () => {
       </ScrollView>
 
       {/* Chat Button - Bottom Right */}
-      <TouchableOpacity
-        style={[styles.chatButton]}
-        onPress={() => {
-          // Navigate to Chat using parent navigator
-          const parent = navigation.getParent();
-          if (parent) {
-            parent.navigate('Chat');
-          }
-        }}
-      >
-        <Text style={styles.chatButtonText}>💬</Text>
-      </TouchableOpacity>
+      {isAiChatEnabled && (
+        <TouchableOpacity
+          style={[styles.chatButton]}
+          onPress={() => {
+            // Navigate to Chat using parent navigator
+            const parent = navigation.getParent();
+            if (parent) {
+              parent.navigate('Chat');
+            }
+          }}
+        >
+          <Text style={styles.chatButtonText}>💬</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };

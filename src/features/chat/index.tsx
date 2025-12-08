@@ -17,6 +17,7 @@ import { styles } from './styles';
 import { getTransactions } from '../../shared/db/transactionsDB';
 import { Transaction } from '../../shared/atoms/transactions';
 import { InputSanitizer } from '../../modules/genai/safety';
+import { useFeatureFlag } from '../../core/config/featureFlags';
 
 // Configuration: Change this to use a different model
 const MODEL_CONFIG = {
@@ -37,6 +38,9 @@ const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
 
   const flatListRef = useRef<FlatList<Message>>(null);
+
+  // Feature flags - reactive, will re-render if flags change at runtime
+  const { isEnabled } = useFeatureFlag();
 
   useEffect(() => {
     const initializeModel = async () => {
@@ -128,18 +132,28 @@ const Chat = () => {
       return;
     }
 
+    let userMessage = userInput.trim();
+
     // Sanitize user input for security (prevents prompt injection & malicious requests)
-    const { sanitized, isBlocked, reason } = InputSanitizer.sanitize(userInput);
+    // Only runs if inputSanitization feature flag is enabled
+    if (isEnabled('aiSafety.inputSanitization')) {
+      const { sanitized, isBlocked, reason } =
+        InputSanitizer.sanitize(userInput);
 
-    if (isBlocked) {
-      setError(
-        reason || 'Your message could not be processed for security reasons.',
-      );
-      setUserInput('');
-      return;
+      if (isBlocked) {
+        // Log blocked input in dev mode for debugging
+        if (isEnabled('debug.logBlockedInputs')) {
+          console.warn('[InputSanitizer] Blocked input:', userInput, reason);
+        }
+        setError(
+          reason || 'Your message could not be processed for security reasons.',
+        );
+        setUserInput('');
+        return;
+      }
+
+      userMessage = sanitized;
     }
-
-    const userMessage = sanitized;
     setUserInput('');
     setIsLoading(true);
     setError(null);
