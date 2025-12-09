@@ -16,7 +16,7 @@ import { Message } from '../../modules/genai/types';
 import { styles } from './styles';
 import { getTransactions } from '../../shared/db/transactionsDB';
 import { Transaction } from '../../shared/atoms/transactions';
-import { InputSanitizer } from '../../modules/genai/safety';
+import { InputSanitizer, TopicFilter } from '../../modules/genai/safety';
 import { useFeatureFlag } from '../../core/config/featureFlags';
 
 // Configuration: Change this to use a different model
@@ -154,6 +154,30 @@ const Chat = () => {
 
       userMessage = sanitized;
     }
+
+    // Filter topic to ensure only finance-related questions are processed
+    // Only runs if topicFiltering feature flag is enabled
+    if (isEnabled('aiSafety.topicFiltering')) {
+      const topicResult = TopicFilter.filter(userMessage);
+      if (!topicResult.isAllowed) {
+        setUserInput('');
+
+        // Add user message to show what they asked
+        const newUserMessage: Message = { role: 'user', content: userMessage };
+        setMessages(prev => [...prev, newUserMessage]);
+
+        // Add assistant response with suggested/contextual response
+        if (topicResult.suggestedResponse) {
+          const assistantMessage: Message = {
+            role: 'assistant',
+            content: topicResult.suggestedResponse,
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+        }
+        return;
+      }
+    }
+
     setUserInput('');
     setIsLoading(true);
     setError(null);
@@ -179,15 +203,11 @@ const Chat = () => {
         '<|endoftext|>',
       ];
 
-      // Build messages array with system message including transaction data
+      // Build messages array with STRICT finance-only system prompt
       const messagesForCompletion = [
         {
           role: 'system' as const,
-          content: `You are a helpful financial assistant. You have access to the user's transaction data and can help them understand their finances, answer questions about their spending, income, and provide financial insights.
-
-${transactionsContext}
-
-Please answer the user's questions based on this data. Be concise, helpful, and provide specific numbers when relevant.`,
+          content: TopicFilter.getFinanceSystemPrompt(transactionsContext),
         },
         ...messages.map(msg => ({
           role: msg.role,

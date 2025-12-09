@@ -13,6 +13,7 @@ export interface FeatureFlagsConfig {
     inputSanitization: boolean;
     outputFiltering: boolean;
     rateLimiting: boolean;
+    topicFiltering: boolean; // Restrict AI to finance-only topics
   };
   security: {
     jailbreakDetection: boolean;

@@ -17,6 +17,7 @@ const baseFlags: FeatureFlagsConfig = {
     inputSanitization: true,
     outputFiltering: true,
     rateLimiting: true,
+    topicFiltering: true, // Only allow finance-related questions
   },
   security: {
     jailbreakDetection: false,
