@@ -367,12 +367,23 @@ IMPORTANT RULES:
 
 5. Be concise and provide specific numbers when relevant.
 
-6. Use the current date above to understand time-relative questions like "today", "this week", "this month".
+6. CRITICAL - Understand the difference between time periods:
+   - "TODAY" = Look at "TODAY'S SUMMARY" section ONLY
+   - "THIS WEEK" = Look at "THIS WEEK'S SUMMARY" section ONLY  
+   - "THIS MONTH" = Look at "THIS MONTH'S SUMMARY" section ONLY
+   - "TOTAL" or "ALL-TIME" or just "income"/"expenses" without time reference = Look at "ALL-TIME TOTALS" section
+   - For SPECIFIC DATES (e.g., "December 8", "yesterday") = Look in "TRANSACTIONS BY DATE" section for that exact date
+
+7. PAY ATTENTION to what the user asks:
+   - "today's income" = Use TODAY'S SUMMARY
+   - "total income" = Use ALL-TIME TOTALS (not today's!)
+   - "income on December 8" = Use TRANSACTIONS BY DATE for that specific date
+   - "current balance" = Use ALL-TIME TOTALS
 
 USER'S FINANCIAL DATA:
 ${transactionsContext}
 
-Remember: Stay strictly on topic. Only discuss the user's finances and the data above.`;
+Remember: Stay strictly on topic. Only discuss the user's finances and the data above. Always use the CORRECT time period section based on what the user asks.`;
 };
 
 export const TopicFilter = {

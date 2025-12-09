@@ -83,4 +83,33 @@ export const styles = StyleSheet.create({
     fontSize: moderateScale(24),
     color: '#999',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutSection: {
+    marginTop: verticalScale(32),
+    paddingHorizontal: scale(20),
+  },
+  logoutButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: moderateScale(12),
+    paddingVertical: verticalScale(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: verticalScale(52),
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: moderateScale(16),
+    fontWeight: '600',
+  },
+  versionText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: moderateScale(12),
+    marginTop: verticalScale(24),
+    marginBottom: verticalScale(16),
+  },
 });

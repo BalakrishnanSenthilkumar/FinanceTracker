@@ -90,39 +90,172 @@ const Chat = () => {
       return 'No transactions available.';
     }
 
-    let formattedData = `User's Financial Transactions (${transactions.length} total):\n\n`;
+    // Get current date info for filtering
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1); // Tomorrow at midnight
 
-    // Calculate summary statistics
-    const income = transactions
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Helper to check if date falls in range
+    const isToday = (dateStr: string) => {
+      const date = new Date(dateStr);
+      // Check if date is within today's range (today midnight to tomorrow midnight)
+      return date >= todayStart && date < todayEnd;
+    };
+    const isThisWeek = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date >= weekStart && date < todayEnd;
+    };
+    const isThisMonth = (dateStr: string) => {
+      const date = new Date(dateStr);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return date >= monthStart && date < monthEnd;
+    };
+
+    // Filter transactions by time period
+    const todayTransactions = transactions.filter(t => isToday(t.date));
+    const weekTransactions = transactions.filter(t => isThisWeek(t.date));
+    const monthTransactions = transactions.filter(t => isThisMonth(t.date));
+
+    // Calculate today's statistics
+    const todayIncome = todayTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
-    const expenses = transactions
+    const todayExpenses = todayTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
-    const balance = income - expenses;
 
-    formattedData += `Summary:\n`;
-    formattedData += `- Total Income: $${income.toFixed(2)}\n`;
-    formattedData += `- Total Expenses: $${expenses.toFixed(2)}\n`;
-    formattedData += `- Balance: $${balance.toFixed(2)}\n\n`;
+    // Calculate this week's statistics
+    const weekIncome = weekTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const weekExpenses = weekTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
 
-    formattedData += `Recent Transactions:\n`;
-    transactions.slice(0, 20).forEach((transaction, index) => {
-      const sign = transaction.type === 'income' ? '+' : '-';
-      formattedData += `${index + 1}. ${transaction.name} (${
-        transaction.type
-      }): ${sign}$${transaction.amount.toFixed(2)}`;
-      if (transaction.description) {
-        formattedData += ` - ${transaction.description}`;
+    // Calculate this month's statistics
+    const monthIncome = monthTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const monthExpenses = monthTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Calculate all-time statistics
+    const totalIncome = transactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const totalExpenses = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const totalBalance = totalIncome - totalExpenses;
+
+    // Group transactions by date for easy date-specific queries
+    const transactionsByDate = new Map<string, Transaction[]>();
+    transactions.forEach(transaction => {
+      const dateKey = new Date(transaction.date).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      if (!transactionsByDate.has(dateKey)) {
+        transactionsByDate.set(dateKey, []);
       }
-      formattedData += ` [Date: ${transaction.date}]\n`;
+      transactionsByDate.get(dateKey)!.push(transaction);
     });
 
-    if (transactions.length > 20) {
+    let formattedData = `User's Financial Data (Today's Date: ${now.toLocaleDateString(
+      'en-IN',
+      { year: 'numeric', month: 'long', day: 'numeric' },
+    )}):\n\n`;
+
+    // TODAY's summary (most important for "today" questions)
+    formattedData += `=== TODAY'S SUMMARY (USE THIS FOR "TODAY" QUESTIONS ONLY) ===\n`;
+    formattedData += `- Today's Income: ₹${todayIncome.toFixed(2)}\n`;
+    formattedData += `- Today's Expenses: ₹${todayExpenses.toFixed(2)}\n`;
+    formattedData += `- Today's Net: ₹${(todayIncome - todayExpenses).toFixed(
+      2,
+    )}\n`;
+    formattedData += `- Transactions Today: ${todayTransactions.length}\n\n`;
+
+    // This week's summary
+    formattedData += `=== THIS WEEK'S SUMMARY (USE THIS FOR "THIS WEEK" QUESTIONS) ===\n`;
+    formattedData += `- This Week's Income: ₹${weekIncome.toFixed(2)}\n`;
+    formattedData += `- This Week's Expenses: ₹${weekExpenses.toFixed(2)}\n`;
+    formattedData += `- This Week's Net: ₹${(weekIncome - weekExpenses).toFixed(
+      2,
+    )}\n\n`;
+
+    // This month's summary
+    formattedData += `=== THIS MONTH'S SUMMARY (USE THIS FOR "THIS MONTH" QUESTIONS) ===\n`;
+    formattedData += `- This Month's Income: ₹${monthIncome.toFixed(2)}\n`;
+    formattedData += `- This Month's Expenses: ₹${monthExpenses.toFixed(2)}\n`;
+    formattedData += `- This Month's Net: ₹${(
+      monthIncome - monthExpenses
+    ).toFixed(2)}\n\n`;
+
+    // All-time totals
+    formattedData += `=== ALL-TIME TOTALS (USE THIS FOR "TOTAL" QUESTIONS) ===\n`;
+    formattedData += `- All-Time Total Income: ₹${totalIncome.toFixed(2)}\n`;
+    formattedData += `- All-Time Total Expenses: ₹${totalExpenses.toFixed(
+      2,
+    )}\n`;
+    formattedData += `- All-Time Current Balance: ₹${totalBalance.toFixed(
+      2,
+    )}\n`;
+    formattedData += `- All-Time Total Transactions: ${transactions.length}\n\n`;
+
+    // Transactions grouped by date (for easy date-specific queries)
+    formattedData += `=== TRANSACTIONS BY DATE ===\n`;
+    // Sort dates in descending order (most recent first)
+    const sortedDates = Array.from(transactionsByDate.keys()).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
+
+    // Show last 30 days of transactions grouped by date
+    sortedDates.slice(0, 30).forEach(dateKey => {
+      const dateTransactions = transactionsByDate.get(dateKey)!;
+      const dateIncome = dateTransactions
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const dateExpenses = dateTransactions
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      formattedData += `\n📅 ${dateKey}:\n`;
+      formattedData += `   Income: ₹${dateIncome.toFixed(
+        2,
+      )} | Expenses: ₹${dateExpenses.toFixed(2)} | Net: ₹${(
+        dateIncome - dateExpenses
+      ).toFixed(2)}\n`;
+      formattedData += `   Transactions:\n`;
+
+      dateTransactions.forEach(transaction => {
+        const sign = transaction.type === 'income' ? '+' : '-';
+        formattedData += `   • ${transaction.name} (${
+          transaction.type
+        }): ${sign}₹${transaction.amount.toFixed(2)}`;
+        if (transaction.description) {
+          formattedData += ` - ${transaction.description}`;
+        }
+        formattedData += `\n`;
+      });
+    });
+
+    if (sortedDates.length > 30) {
       formattedData += `\n... and ${
-        transactions.length - 20
-      } more transactions.\n`;
+        sortedDates.length - 30
+      } more dates with transactions.\n`;
     }
+
     console.log('formattedData', formattedData);
     return formattedData;
   };
