@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from '../../shared/components';
 import { useAtom } from 'jotai';
@@ -43,26 +43,68 @@ const Home = () => {
   // Feature flag - reactive, re-renders if flag changes at runtime
   const isAiChatEnabled = useIsFeatureEnabled('features.aiChat');
 
-  useEffect(() => {
-    getTransactions()
-      .then(transactions => {
-        // console.log('transactions', transactions);
-        // Update the transactions atom - derived atoms will recalculate automatically
-        setTransactions(transactions);
-      })
-      .catch(err => {
-        console.error('Failed to fetch transactions', err);
-      });
-  }, [setTransactions]);
-
-  // Calculate chat button position: tab bar height (60) + tab bar bottom padding + spacing (16)
-
-  const formatCurrency = (amount: number) => {
+  // Memoized currency formatter - create once, reuse across renders
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'INR',
     }).format(Math.abs(amount));
-  };
+  }, []);
+
+  // Memoized formatted values to avoid recalculating on every render
+  const formattedBalance = useMemo(
+    () => formatCurrency(totalBalance),
+    [totalBalance, formatCurrency],
+  );
+  const formattedIncome = useMemo(
+    () => formatCurrency(totalIncome),
+    [totalIncome, formatCurrency],
+  );
+  const formattedExpense = useMemo(
+    () => formatCurrency(totalExpense),
+    [totalExpense, formatCurrency],
+  );
+
+  // Load transactions on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTransactions = async () => {
+      try {
+        const transactions = await getTransactions();
+        if (isMounted) {
+          setTransactions(transactions);
+        }
+      } catch (err) {
+        console.error('Failed to fetch transactions', err);
+      }
+    };
+
+    loadTransactions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setTransactions]);
+
+  // Memoized navigation handlers to prevent unnecessary re-renders
+  const handleProfilePress = useCallback(() => {
+    const parent = navigation.getParent();
+    if (parent) {
+      parent.navigate('Profile');
+    }
+  }, [navigation]);
+
+  const handleHistoryPress = useCallback(() => {
+    navigation.navigate('History');
+  }, [navigation]);
+
+  const handleChatPress = useCallback(() => {
+    const parent = navigation.getParent();
+    if (parent) {
+      parent.navigate('Chat');
+    }
+  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -75,13 +117,7 @@ const Home = () => {
           <Text style={styles.headerTitle}>Finance Tracker</Text>
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => {
-              // Navigate to Profile using parent navigator
-              const parent = navigation.getParent();
-              if (parent) {
-                parent.navigate('Profile');
-              }
-            }}
+            onPress={handleProfilePress}
           >
             <Text style={styles.profileButtonText}>👤</Text>
           </TouchableOpacity>
@@ -96,7 +132,7 @@ const Home = () => {
               totalBalance < 0 && styles.balanceAmountNegative,
             ]}
           >
-            {formatCurrency(totalBalance)}
+            {formattedBalance}
           </Text>
         </View>
 
@@ -104,23 +140,18 @@ const Home = () => {
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, styles.incomeCard]}>
             <Text style={styles.statLabel}>Total Income</Text>
-            <Text style={styles.statAmount}>{formatCurrency(totalIncome)}</Text>
+            <Text style={styles.statAmount}>{formattedIncome}</Text>
           </View>
           <View style={[styles.statCard, styles.expenseCard]}>
             <Text style={styles.statLabel}>Total Expense</Text>
-            <Text style={styles.statAmount}>
-              {formatCurrency(totalExpense)}
-            </Text>
+            <Text style={styles.statAmount}>{formattedExpense}</Text>
           </View>
         </View>
 
         {/* All Transactions Button */}
         <TouchableOpacity
           style={styles.allTransactionsButton}
-          onPress={() => {
-            // Navigate to History - handled by bottom tab navigation
-            navigation.navigate('History');
-          }}
+          onPress={handleHistoryPress}
         >
           <Text style={styles.allTransactionsButtonText}>All Transactions</Text>
         </TouchableOpacity>
@@ -128,16 +159,7 @@ const Home = () => {
 
       {/* Chat Button - Bottom Right */}
       {isAiChatEnabled && (
-        <TouchableOpacity
-          style={[styles.chatButton]}
-          onPress={() => {
-            // Navigate to Chat using parent navigator
-            const parent = navigation.getParent();
-            if (parent) {
-              parent.navigate('Chat');
-            }
-          }}
-        >
+        <TouchableOpacity style={[styles.chatButton]} onPress={handleChatPress}>
           <Text style={styles.chatButtonText}>💬</Text>
         </TouchableOpacity>
       )}

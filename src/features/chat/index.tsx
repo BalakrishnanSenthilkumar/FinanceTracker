@@ -18,6 +18,7 @@ import { getTransactions } from '../../shared/db/transactionsDB';
 import { Transaction } from '../../shared/atoms/transactions';
 import { InputSanitizer, TopicFilter } from '../../modules/genai/safety';
 import { useFeatureFlag } from '../../core/config/featureFlags';
+import { performanceMonitor } from '../../shared/utils/performanceMonitor';
 
 // Configuration: Change this to use a different model
 const MODEL_CONFIG = {
@@ -25,7 +26,7 @@ const MODEL_CONFIG = {
   // Place your .gguf model file in:
   // - Android: android/app/src/main/assets/models/
   // - iOS: Add to Xcode project in the models folder
-  filename: 'qwen2-0_5b-instruct-q5_k_m.gguf',
+  filename: 'qwen2.5-1.5b-instruct-q5_k_m.gguf',
   // Alternative: 'gemma-2b-it-q4_k_m.gguf' (if you have a GGUF version)
 };
 
@@ -36,8 +37,17 @@ const Chat = () => {
   const [context, setContext] = useState<ModelContext | null>(null);
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [streamingResponse, setStreamingResponse] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const flatListRef = useRef<FlatList<Message>>(null);
+
+  // Cache for transaction data to avoid repeated database queries
+  const transactionsCacheRef = useRef<{
+    data: Transaction[];
+    timestamp: number;
+  } | null>(null);
+  const CACHE_DURATION = 30000; // 30 seconds cache
 
   // Feature flags - reactive, will re-render if flags change at runtime
   const { isEnabled } = useFeatureFlag();
@@ -60,11 +70,11 @@ const Chat = () => {
 
         console.log('Initializing model with path:', modelPath);
 
-        // Initialize model using the service
+        // Initialize model using the service with optimized parameters
         const modelContext = await modelService.initializeModel({
           model: modelPath,
           use_mlock: false, // Set to false for Android to avoid permission issues
-          n_ctx: 2048,
+          n_ctx: 4096, // Larger context for raw transaction data (1.5B can handle this)
           n_gpu_layers: 0, // Set to 0 for Android (no GPU layers on most Android devices)
           // embedding: true, // use embedding
         });
@@ -84,179 +94,58 @@ const Chat = () => {
     initializeModel();
   }, []);
 
-  // Helper function to format transactions for AI context
+  // Helper function to format transactions for AI context - RAW DATA APPROACH
   const formatTransactionsForAI = (transactions: Transaction[]): string => {
     if (transactions.length === 0) {
       return 'No transactions available.';
     }
 
-    // Get current date info for filtering
     const now = new Date();
-    const todayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    );
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1); // Tomorrow at midnight
+    const todayDateString = now.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
 
-    const weekStart = new Date(todayStart);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Sort transactions by date (most recent first)
+    const sortedTransactions = [...transactions].sort((a, b) => {
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
 
-    // Helper to check if date falls in range
-    const isToday = (dateStr: string) => {
-      const date = new Date(dateStr);
-      // Check if date is within today's range (today midnight to tomorrow midnight)
-      return date >= todayStart && date < todayEnd;
-    };
-    const isThisWeek = (dateStr: string) => {
-      const date = new Date(dateStr);
-      return date >= weekStart && date < todayEnd;
-    };
-    const isThisMonth = (dateStr: string) => {
-      const date = new Date(dateStr);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      return date >= monthStart && date < monthEnd;
-    };
+    // Limit to most recent 50 transactions to fit in context window
+    // Model will filter and calculate based on user's query
+    const maxTransactions = Math.min(100, sortedTransactions.length);
+    const recentTransactions = sortedTransactions.slice(0, maxTransactions);
 
-    // Filter transactions by time period
-    const todayTransactions = transactions.filter(t => isToday(t.date));
-    const weekTransactions = transactions.filter(t => isThisWeek(t.date));
-    const monthTransactions = transactions.filter(t => isThisMonth(t.date));
+    let formattedData = `TRANSACTION DATA (Current Date: ${todayDateString}):\n\n`;
+    formattedData += `Total Transactions in Database: ${transactions.length}\n`;
+    formattedData += `Showing Most Recent: ${recentTransactions.length}\n\n`;
 
-    // Calculate today's statistics
-    const todayIncome = todayTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const todayExpenses = todayTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Format as simple table - let the AI do the filtering and calculations
+    formattedData += `DATE | TYPE | NAME | AMOUNT | DESCRIPTION\n`;
+    formattedData += `${'='.repeat(80)}\n`;
 
-    // Calculate this week's statistics
-    const weekIncome = weekTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const weekExpenses = weekTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    // Calculate this month's statistics
-    const monthIncome = monthTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const monthExpenses = monthTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    // Calculate all-time statistics
-    const totalIncome = transactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const totalExpenses = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const totalBalance = totalIncome - totalExpenses;
-
-    // Group transactions by date for easy date-specific queries
-    const transactionsByDate = new Map<string, Transaction[]>();
-    transactions.forEach(transaction => {
-      const dateKey = new Date(transaction.date).toLocaleDateString('en-IN', {
+    recentTransactions.forEach(transaction => {
+      const date = new Date(transaction.date).toLocaleDateString('en-IN', {
         year: 'numeric',
-        month: 'long',
+        month: 'short',
         day: 'numeric',
       });
-      if (!transactionsByDate.has(dateKey)) {
-        transactionsByDate.set(dateKey, []);
-      }
-      transactionsByDate.get(dateKey)!.push(transaction);
+      const type = transaction.type.toUpperCase();
+      const name = transaction.name;
+      const amount = `₹${transaction.amount.toFixed(2)}`;
+      const desc = transaction.description || '-';
+
+      formattedData += `${date} | ${type} | ${name} | ${amount} | ${desc}\n`;
     });
 
-    let formattedData = `User's Financial Data (Today's Date: ${now.toLocaleDateString(
-      'en-IN',
-      { year: 'numeric', month: 'long', day: 'numeric' },
-    )}):\n\n`;
-
-    // TODAY's summary (most important for "today" questions)
-    formattedData += `=== TODAY'S SUMMARY (USE THIS FOR "TODAY" QUESTIONS ONLY) ===\n`;
-    formattedData += `- Today's Income: ₹${todayIncome.toFixed(2)}\n`;
-    formattedData += `- Today's Expenses: ₹${todayExpenses.toFixed(2)}\n`;
-    formattedData += `- Today's Net: ₹${(todayIncome - todayExpenses).toFixed(
-      2,
-    )}\n`;
-    formattedData += `- Transactions Today: ${todayTransactions.length}\n\n`;
-
-    // This week's summary
-    formattedData += `=== THIS WEEK'S SUMMARY (USE THIS FOR "THIS WEEK" QUESTIONS) ===\n`;
-    formattedData += `- This Week's Income: ₹${weekIncome.toFixed(2)}\n`;
-    formattedData += `- This Week's Expenses: ₹${weekExpenses.toFixed(2)}\n`;
-    formattedData += `- This Week's Net: ₹${(weekIncome - weekExpenses).toFixed(
-      2,
-    )}\n\n`;
-
-    // This month's summary
-    formattedData += `=== THIS MONTH'S SUMMARY (USE THIS FOR "THIS MONTH" QUESTIONS) ===\n`;
-    formattedData += `- This Month's Income: ₹${monthIncome.toFixed(2)}\n`;
-    formattedData += `- This Month's Expenses: ₹${monthExpenses.toFixed(2)}\n`;
-    formattedData += `- This Month's Net: ₹${(
-      monthIncome - monthExpenses
-    ).toFixed(2)}\n\n`;
-
-    // All-time totals
-    formattedData += `=== ALL-TIME TOTALS (USE THIS FOR "TOTAL" QUESTIONS) ===\n`;
-    formattedData += `- All-Time Total Income: ₹${totalIncome.toFixed(2)}\n`;
-    formattedData += `- All-Time Total Expenses: ₹${totalExpenses.toFixed(
-      2,
-    )}\n`;
-    formattedData += `- All-Time Current Balance: ₹${totalBalance.toFixed(
-      2,
-    )}\n`;
-    formattedData += `- All-Time Total Transactions: ${transactions.length}\n\n`;
-
-    // Transactions grouped by date (for easy date-specific queries)
-    formattedData += `=== TRANSACTIONS BY DATE ===\n`;
-    // Sort dates in descending order (most recent first)
-    const sortedDates = Array.from(transactionsByDate.keys()).sort((a, b) => {
-      return new Date(b).getTime() - new Date(a).getTime();
-    });
-
-    // Show last 30 days of transactions grouped by date
-    sortedDates.slice(0, 30).forEach(dateKey => {
-      const dateTransactions = transactionsByDate.get(dateKey)!;
-      const dateIncome = dateTransactions
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const dateExpenses = dateTransactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      formattedData += `\n📅 ${dateKey}:\n`;
-      formattedData += `   Income: ₹${dateIncome.toFixed(
-        2,
-      )} | Expenses: ₹${dateExpenses.toFixed(2)} | Net: ₹${(
-        dateIncome - dateExpenses
-      ).toFixed(2)}\n`;
-      formattedData += `   Transactions:\n`;
-
-      dateTransactions.forEach(transaction => {
-        const sign = transaction.type === 'income' ? '+' : '-';
-        formattedData += `   • ${transaction.name} (${
-          transaction.type
-        }): ${sign}₹${transaction.amount.toFixed(2)}`;
-        if (transaction.description) {
-          formattedData += ` - ${transaction.description}`;
-        }
-        formattedData += `\n`;
-      });
-    });
-
-    if (sortedDates.length > 30) {
+    if (transactions.length > maxTransactions) {
       formattedData += `\n... and ${
-        sortedDates.length - 30
-      } more dates with transactions.\n`;
+        transactions.length - maxTransactions
+      } older transactions (not shown to save space)\n`;
     }
 
-    console.log('formattedData', formattedData);
+    console.log('Raw transaction data sent to model:', formattedData);
     return formattedData;
   };
 
@@ -320,9 +209,32 @@ const Chat = () => {
     setMessages(prev => [...prev, newUserMessage]);
 
     try {
-      // Fetch transactions from SQLite
-      const transactions = await getTransactions();
+      // Fetch transactions from SQLite (with caching for performance)
+      performanceMonitor.start('fetch-transactions');
+      let transactions: Transaction[];
+      const now = Date.now();
+
+      if (
+        transactionsCacheRef.current &&
+        now - transactionsCacheRef.current.timestamp < CACHE_DURATION
+      ) {
+        // Use cached data
+        transactions = transactionsCacheRef.current.data;
+        console.log('[Performance] Using cached transaction data');
+      } else {
+        // Fetch fresh data and cache it
+        transactions = await getTransactions();
+        transactionsCacheRef.current = {
+          data: transactions,
+          timestamp: now,
+        };
+        console.log('[Performance] Fetched fresh transaction data');
+      }
+      performanceMonitor.end('fetch-transactions');
+
+      performanceMonitor.start('format-context');
       const transactionsContext = formatTransactionsForAI(transactions);
+      performanceMonitor.end('format-context');
 
       const stopWords = [
         '</s>',
@@ -352,38 +264,115 @@ const Chat = () => {
         },
       ];
 
+      // Enable streaming for better UX
+      setIsStreaming(true);
+      setStreamingResponse('');
+
+      // Optimized completion parameters for quality and performance
+      performanceMonitor.start('ai-completion');
       const msgResult = await context.completion(
         {
           messages: messagesForCompletion,
-          n_predict: 200,
+          n_predict: 250, // Enough tokens for model to calculate and explain
           stop: stopWords,
         },
         (data: { token: string }) => {
-          // This is a partial completion callback
+          // Streaming callback - show tokens as they arrive (real-time response)
           const { token } = data;
-          console.log('Token received:', token);
+
+          // Update streaming response in real-time
+          setStreamingResponse(prev => {
+            const newText = prev + token;
+            // Auto-scroll as content streams in
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 50);
+            return newText;
+          });
         },
       );
+      performanceMonitor.end('ai-completion');
+
+      // Clear streaming state
+      setIsStreaming(false);
+      setStreamingResponse('');
 
       console.log('Completion result:', msgResult);
+
+      // Validate and clean the response
+      let responseText = msgResult.text.trim();
+
+      // Remove any incomplete sentences at the end
+      if (responseText && !responseText.match(/[.!?]$/)) {
+        const lastSentence = responseText.lastIndexOf('.');
+        if (lastSentence > 0) {
+          responseText = responseText.substring(0, lastSentence + 1);
+        }
+      }
 
       // Add assistant response to conversation
       const assistantMessage: Message = {
         role: 'assistant',
-        content: msgResult.text,
+        content:
+          responseText ||
+          'I apologize, I could not generate a proper response. Please try again.',
       };
       setMessages(prev => [...prev, assistantMessage]);
       flatListRef.current?.scrollToEnd({ animated: true });
       setIsLoading(false);
     } catch (err) {
-      console.error('Error generating response:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to generate response',
-      );
+      console.error('[Error] Failed to generate response:', err);
+
+      // Clean up streaming state
+      setIsStreaming(false);
+      setStreamingResponse('');
+
+      // Provide user-friendly error messages with actionable suggestions
+      let errorMessage = 'Failed to generate response. ';
+
+      if (err instanceof Error) {
+        // Check for specific error types
+        if (
+          err.message.includes('out of memory') ||
+          err.message.includes('memory')
+        ) {
+          errorMessage +=
+            'The AI model ran out of memory. Try asking a simpler question or clear chat history.';
+        } else if (err.message.includes('timeout')) {
+          errorMessage += 'The request timed out. Please try again.';
+        } else if (
+          err.message.includes('model not loaded') ||
+          err.message.includes('context')
+        ) {
+          errorMessage =
+            'AI model error. Please restart the app and try again.';
+        } else {
+          errorMessage += err.message;
+        }
+      } else {
+        errorMessage += 'An unexpected error occurred. Please try again.';
+      }
+
+      setError(errorMessage);
       setIsLoading(false);
+
+      // Remove the failed user message to allow retry
+      setMessages(prev => prev.slice(0, -1));
+
+      // Clear error after 8 seconds to give user time to read
+      setTimeout(() => setError(null), 8000);
     }
   };
 
+  const handleClearChat = () => {
+    setMessages([]);
+    setError(null);
+    setStreamingResponse('');
+    setIsStreaming(false);
+    // Clear transaction cache to force fresh data on next query
+    transactionsCacheRef.current = null;
+  };
+  console.log('messages', messages);
   return (
     <View style={styles.container}>
       {isInitializing ? (
@@ -392,98 +381,134 @@ const Chat = () => {
           <Text style={styles.loadingText}>Initializing AI model...</Text>
         </View>
       ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-          style={styles.keyboardAvoidingView}
-        >
-          <FlatList
-            ref={flatListRef as any}
-            data={messages}
-            keyExtractor={(item, index) => `message-${index}`}
-            onContentSizeChange={() => {
-              if (messages.length > 0) {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }
-            }}
-            onLayout={() => {
-              if (messages.length > 0) {
-                flatListRef.current?.scrollToEnd({ animated: false });
-              }
-            }}
-            renderItem={({ item: message }) => (
-              <View
-                style={[
-                  styles.messageBubble,
-                  message.role === 'user'
-                    ? styles.userMessage
-                    : styles.assistantMessage,
-                ]}
+        <>
+          {/* Header with Clear Chat button */}
+          {messages.length > 0 && (
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>AI Assistant</Text>
+              <TouchableOpacity
+                onPress={handleClearChat}
+                style={styles.clearButton}
               >
-                <Text
+                <Text style={styles.clearButtonText}>Clear Chat</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            style={styles.keyboardAvoidingView}
+          >
+            <FlatList
+              ref={flatListRef as any}
+              data={messages}
+              keyExtractor={(item, index) => `message-${index}`}
+              onContentSizeChange={() => {
+                if (messages.length > 0) {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
+              onLayout={() => {
+                if (messages.length > 0) {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                }
+              }}
+              renderItem={({ item: message }) => (
+                <View
                   style={[
-                    styles.messageText,
+                    styles.messageBubble,
                     message.role === 'user'
-                      ? styles.userMessageText
-                      : styles.assistantMessageText,
+                      ? styles.userMessage
+                      : styles.assistantMessage,
                   ]}
                 >
-                  {message.content}
-                </Text>
-              </View>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  Ask me about your finances! I can help you analyze your
-                  transactions, spending patterns, and financial health.
-                </Text>
-              </View>
-            }
-            ListFooterComponent={
-              <>
-                {isLoading && (
-                  <View style={styles.loadingBubble}>
-                    <ActivityIndicator size="small" color="#666" />
-                    <Text style={styles.loadingMessageText}>Thinking...</Text>
-                  </View>
-                )}
-                {error && (
-                  <View style={styles.errorBubble}>
-                    <Text style={styles.errorText}>Error: {error}</Text>
-                  </View>
-                )}
-              </>
-            }
-            style={styles.messagesContainer}
-            contentContainerStyle={styles.messagesContent}
-          />
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              value={userInput}
-              onChangeText={setUserInput}
-              placeholder="Type your message..."
-              placeholderTextColor="#999"
-              multiline
-              editable={!isLoading}
-              onSubmitEditing={sendMessage}
+                  <Text
+                    style={[
+                      styles.messageText,
+                      message.role === 'user'
+                        ? styles.userMessageText
+                        : styles.assistantMessageText,
+                    ]}
+                  >
+                    {message.content}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>
+                    Ask me about your finances! I can help you analyze your
+                    transactions, spending patterns, and financial health.
+                  </Text>
+                </View>
+              }
+              ListFooterComponent={
+                <>
+                  {isStreaming && streamingResponse && (
+                    <View
+                      style={[styles.messageBubble, styles.assistantMessage]}
+                    >
+                      <Text
+                        style={[
+                          styles.messageText,
+                          styles.assistantMessageText,
+                        ]}
+                      >
+                        {streamingResponse}
+                      </Text>
+                      <View style={styles.streamingIndicator}>
+                        <ActivityIndicator size="small" color="#4A90E2" />
+                      </View>
+                    </View>
+                  )}
+                  {isLoading && (
+                    <View style={styles.loadingBubble}>
+                      <ActivityIndicator size="small" color="#666" />
+                      <Text style={styles.loadingMessageText}>Thinking...</Text>
+                    </View>
+                  )}
+                  {error && (
+                    <View style={styles.errorBubble}>
+                      <Text style={styles.errorText}>{error}</Text>
+                      <TouchableOpacity
+                        onPress={() => setError(null)}
+                        style={styles.dismissError}
+                      >
+                        <Text style={styles.dismissErrorText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              }
+              style={styles.messagesContainer}
+              contentContainerStyle={styles.messagesContent}
             />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                (!userInput.trim() || isLoading) && styles.sendButtonDisabled,
-              ]}
-              onPress={sendMessage}
-              disabled={!userInput.trim() || isLoading}
-            >
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                value={userInput}
+                onChangeText={setUserInput}
+                placeholder="Type your message..."
+                placeholderTextColor="#999"
+                multiline
+                editable={!isLoading}
+                onSubmitEditing={sendMessage}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!userInput.trim() || isLoading) && styles.sendButtonDisabled,
+                ]}
+                onPress={sendMessage}
+                disabled={!userInput.trim() || isLoading}
+              >
+                <Text style={styles.sendButtonText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </>
       )}
     </View>
   );
 };
-
 export default Chat;

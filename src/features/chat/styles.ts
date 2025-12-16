@@ -10,6 +10,32 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  headerTitle: {
+    fontSize: moderateScale(18),
+    fontWeight: '700',
+    color: '#333',
+  },
+  clearButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(8),
+  },
+  clearButtonText: {
+    color: '#FFFFFF',
+    fontSize: moderateScale(14),
+    fontWeight: '600',
+  },
   keyboardAvoidingView: {
     flex: 1,
   },
@@ -87,11 +113,27 @@ export const styles = StyleSheet.create({
     borderRadius: moderateScale(16),
     marginBottom: verticalScale(12),
     maxWidth: '90%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   errorText: {
     color: '#D32F2F',
     fontSize: moderateScale(14),
-    textAlign: 'center',
+    flex: 1,
+  },
+  dismissError: {
+    marginLeft: scale(8),
+    padding: scale(4),
+  },
+  dismissErrorText: {
+    color: '#D32F2F',
+    fontSize: moderateScale(18),
+    fontWeight: 'bold',
+  },
+  streamingIndicator: {
+    marginTop: verticalScale(4),
+    alignSelf: 'flex-start',
   },
   inputContainer: {
     flexDirection: 'row',
